@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Minesweeper — The Office</title>
+<style>
+  :root{
+    --bg:#0f1916;
+    --panel:#121c19;
+    --panel-2:#0e1614;
+    --ink:#d7ffe0;
+    --muted:#9be3a6;
+    --accent:#36d07f;
+    --accent-2:#26b86c;
+    --danger:#ff3b30;
+    --tile:#2b3432;
+    --tile-edge:#3a4542;
+    --tile-open:#1a2321;
+    --shadow:rgba(0,0,0,.35);
+  }
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font:500 16px/1.4 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial;
+    display:flex;align-items:center;justify-content:center;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .game{
+    width:min(92vw,420px);
+    background:linear-gradient(180deg, var(--panel), var(--panel-2));
+    border-radius:20px;
+    box-shadow:0 10px 30px var(--shadow), inset 0 0 0 1px rgba(255,255,255,.04);
+    padding:20px 16px 18px;
+  }
+  .top{
+    display:grid;
+    grid-template-columns:1fr auto 1fr;
+    align-items:center;
+    gap:12px;
+    margin-bottom:12px;
+  }
+  .badge{
+    justify-self:start;
+    background:#11231d;
+    color:#b7ffc9;
+    border-radius:12px;
+    padding:10px 14px;
+    font-weight:700;
+    letter-spacing:.02em;
+    box-shadow:0 6px 14px rgba(0,0,0,.25), inset 0 0 0 1px rgba(255,255,255,.06);
+    display:inline-flex;align-items:center;gap:.5ch;
+  }
+  .badge .mono{font-family:"Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace;}
+  .toolbar{justify-self:center; display:flex; gap:18px; align-items:center;}
+  .tool{
+    width:28px;height:28px;border-radius:8px;background:#0e1b16;
+    display:grid;place-items:center;cursor:pointer;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.06), 0 6px 12px rgba(0,0,0,.25);
+    user-select:none;
+  }
+  .tool[aria-pressed="true"]{background:#123125;outline:2px solid var(--accent-2);}
+  .tool span{filter:drop-shadow(0 1px 0 rgba(0,0,0,.35));}
+
+  .board{
+    width:100%; aspect-ratio:1;
+    background:#101a17;
+    border-radius:8px;
+    padding:10px;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);
+    position:relative;
+  }
+  .grid{
+    width:100%;height:100%;
+    display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(9,1fr);
+    gap:4px;
+  }
+  .cell{
+    position:relative; cursor:pointer; user-select:none;
+    background:linear-gradient(180deg, #333c39, #2a3331);
+    border-radius:4px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06), inset 0 -1px 0 rgba(0,0,0,.35);
+    display:grid;place-items:center;
+    font-family:"Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-weight:800; font-size:18px;
+    color:#b7ffc9;
+  }
+  .cell.open{
+    background:var(--tile-open);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);
+  }
+  .flag, .num, .bomb{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;}
+  .flag{font-size:18px; z-index:4; display:none; text-shadow:0 1px 0 rgba(0,0,0,.35);}
+  .cell.flagged:not(.open) .flag{display:block;}
+  .bomb{font-size:18px}
+  .num[data-n="1"]{color:#6bd1ff}
+  .num[data-n="2"]{color:#64e38b}
+  .num[data-n="3"]{color:#ff7f66}
+  .num[data-n="4"]{color:#6e8bff}
+  .num[data-n="5"]{color:#ffb84d}
+  .num[data-n="6"]{color:#ffd166}
+  .num[data-n="7"]{color:#b78cff}
+  .num[data-n="8"]{color:#cbd5e1}
+
+  .footer{display:flex;justify-content:center;margin-top:10px;gap:10px}
+  .btn{
+    background:#0e1b16;color:var(--muted);border:none;border-radius:10px;
+    padding:10px 14px;font-weight:700;letter-spacing:.02em;cursor:pointer;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.06), 0 6px 12px rgba(0,0,0,.25);
+  }
+  .overlay{
+    position:absolute; inset:0; display:grid; place-items:center;
+    background:rgba(0,0,0,.6); border-radius:8px;
+    opacity:0; visibility:hidden; transition:.2s;
+  }
+  .overlay.show{opacity:1; visibility:visible;}
+  .overlay .card{
+    background:#0f1b17; border-radius:14px; padding:16px 18px;
+    box-shadow:0 10px 30px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.06);
+    text-align:center; font-weight:800;
+  }
+</style>
+</head>
+<body>
+  <div class="game" id="game">
+    <div class="top">
+      <div class="badge"><span>😀</span><span class="mono" id="mineCount">10</span></div>
+      <div class="toolbar">
+        <button class="tool" id="revealBtn" aria-pressed="true" title="Reveal"><span>⛏️</span></button>
+        <button class="tool" id="flagBtn" aria-pressed="false" title="Flag"><span>🚩</span></button>
+      </div>
+      <div class="badge" style="justify-self:end;"><span class="mono" id="timer">00:00</span></div>
+    </div>
+    <div class="board">
+      <div class="grid" id="grid"></div>
+      <div class="overlay" id="overlay">
+        <div class="card" id="overlayText">Game Over</div>
+      </div>
+    </div>
+    <div class="footer">
+      <button class="btn" id="resetBtn">reset</button>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const W = 9, H = 9, MINES = 10;
+  const gridEl = document.getElementById('grid');
+  const mineCountEl = document.getElementById('mineCount');
+  const timerEl = document.getElementById('timer');
+  const overlay = document.getElementById('overlay');
+  const overlayText = document.getElementById('overlayText');
+  const flagBtn = document.getElementById('flagBtn');
+  const revealBtn = document.getElementById('revealBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  let mode = 'reveal'; // 'flag' or 'reveal'
+
+  let mine = Array(W*H).fill(false);
+  let open = Array(W*H).fill(false);
+  let flagged = Array(W*H).fill(false);
+  let count = Array(W*H).fill(0);
+  let started = false, timer=0, tId=null, alive=true, won=false, remaining=MINES;
+
+  function rcToIdx(r,c){ return r*W + c; }
+  function idxToRC(i){ return {r: Math.floor(i/W), c: i%W}; }
+  function neighbors(i){
+    const {r,c} = idxToRC(i); const out=[];
+    for(let dr=-1; dr<=1; dr++) for(let dc=-1; dc<=1; dc++){
+      if(!dr && !dc) continue;
+      const nr=r+dr, nc=c+dc;
+      if(nr>=0 && nr<H && nc>=0 && nc<W) out.push(rcToIdx(nr,nc));
+    }
+    return out;
+  }
+
+  function placeMines(safeIndex){
+    // Random, but avoid the first clicked index and its neighbors
+    const forbidden = new Set([safeIndex, ...neighbors(safeIndex)]);
+    let placed=0;
+    while(placed<MINES){
+      const i = Math.floor(Math.random()*W*H);
+      if(mine[i] || forbidden.has(i)) continue;
+      mine[i]=true; placed++;
+    }
+    // counts
+    for(let i=0;i<W*H;i++){
+      if(mine[i]){ count[i]=-1; continue; }
+      count[i] = neighbors(i).reduce((acc,j)=>acc + (mine[j]?1:0),0);
+    }
+  }
+
+  function renderBoard(){
+    gridEl.innerHTML='';
+    for(let i=0;i<W*H;i++){
+      const cell=document.createElement('div');
+      cell.className='cell';
+      cell.dataset.i=i;
+      const flag=document.createElement('div'); flag.className='flag'; flag.textContent='🚩';
+      cell.appendChild(flag);
+      gridEl.appendChild(cell);
+    }
+  }
+
+  function startTimer(){
+    tId = setInterval(()=>{
+      timer++; const m=String(Math.floor(timer/60)).padStart(2,'0'); const s=String(timer%60).padStart(2,'0');
+      timerEl.textContent=`${m}:${s}`;
+    },1000);
+  }
+
+  function showOverlay(text){
+    overlayText.textContent=text;
+    overlay.classList.add('show');
+  }
+
+  function hideOverlay(){ overlay.classList.remove('show'); }
+
+  function openCell(i){
+    if(!alive || won || open[i] || flagged[i]) return;
+    if(!started){
+      started=true; placeMines(i); startTimer();
+    }
+    if(mine[i]){
+      revealAllMines();
+      alive=false; clearInterval(tId);
+      showOverlay('💥 game over');
+      return;
+    }
+    const q=[i];
+    while(q.length){
+      const u=q.shift();
+      if(open[u]||flagged[u]) continue;
+      open[u]=true;
+      const cell=gridEl.children[u];
+      cell.classList.add('open');
+      if(count[u]>0){
+        const num=document.createElement('div');
+        num.className='num'; num.dataset.n=String(count[u]); num.textContent=String(count[u]);
+        cell.appendChild(num);
+      }else{
+        neighbors(u).forEach(v=>{ if(!open[v] && !mine[v]) q.push(v); });
+      }
+    }
+    checkWin();
+  }
+
+  function toggleFlag(i){
+    if(!alive || won || open[i]) return;
+    flagged[i]=!flagged[i];
+    gridEl.children[i].classList.toggle('flagged', flagged[i]);
+    remaining += flagged[i] ? -1 : 1;
+    mineCountEl.textContent = remaining;
+    checkWin();
+  }
+
+  function revealAllMines(){
+    for(let i=0;i<W*H;i++) if(mine[i]){
+      const cell=gridEl.children[i];
+      cell.classList.add('open');
+      const bomb=document.createElement('div');
+      bomb.className='bomb'; bomb.textContent='💣';
+      cell.appendChild(bomb);
+    }
+  }
+
+  function checkWin(){
+    if(!alive) return;
+    // Win when all non-mine are open
+    const clear = open.every((o,i)=> o || mine[i]);
+    if(clear){
+      won=true; alive=false; clearInterval(tId);
+      showOverlay('🎉 you win');
+    }
+  }
+
+  function reset(){
+    mine.fill(false); open.fill(false); flagged.fill(false); count.fill(0);
+    alive=true; won=false; started=false; timer=0; remaining=MINES;
+    mineCountEl.textContent=remaining; timerEl.textContent='00:00';
+    clearInterval(tId); hideOverlay();
+    renderBoard();
+  }
+
+  // Events
+  revealBtn.addEventListener('click', ()=>{
+    mode='reveal'; revealBtn.setAttribute('aria-pressed','true'); flagBtn.setAttribute('aria-pressed','false');
+  });
+  flagBtn.addEventListener('click', ()=>{
+    mode='flag'; flagBtn.setAttribute('aria-pressed','true'); revealBtn.setAttribute('aria-pressed','false');
+  });
+  gridEl.addEventListener('click', (e)=>{
+    const cell = e.target.closest('.cell'); if(!cell) return;
+    const i=Number(cell.dataset.i);
+    if(mode==='flag') toggleFlag(i); else openCell(i);
+  });
+  resetBtn.addEventListener('click', reset);
+
+  // Init
+  reset();
+})();</script>
+</body>
+</html>
+
